@@ -946,7 +946,13 @@ void Steam_Overlay::build_friend_window(Friend const& frd, friend_window_state& 
             }
         }
 
-        ImGui::InputTextMultiline("##chat_history", &state.chat_history[0], state.chat_history.length(), { -1.0f, -2.0f * ImGui::GetFontSize() }, ImGuiInputTextFlags_ReadOnly);
+        ImGui::InputTextMultiline(
+            "##chat_history",
+            const_cast<char *>(state.chat_history.c_str()),
+            state.chat_history.size() + 1,
+            { -1.0f, -2.0f * ImGui::GetFontSize() },
+            ImGuiInputTextFlags_ReadOnly
+        );
         // TODO: Fix the layout of the chat line + send button.
         // It should be like this: chat input should fill the window size minus send button size (button size is fixed)
         // |------------------------------|
@@ -2373,7 +2379,12 @@ void Steam_Overlay::render_main_window()
                 ImGui::Spacing();
 
                 ImGui::PushItemWidth(ImGui::CalcTextSize(url.c_str()).x + 20);
-                ImGui::InputText("##url_copy", (char *)url.data(), url.size(), ImGuiInputTextFlags_ReadOnly);
+                ImGui::InputText(
+                    "##url_copy",
+                    const_cast<char *>(url.c_str()),
+                    url.size() + 1,
+                    ImGuiInputTextFlags_ReadOnly
+                );
                 ImGui::PopItemWidth();
 
                 ImGui::Spacing();

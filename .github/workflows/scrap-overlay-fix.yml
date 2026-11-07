@@ -1,0 +1,87 @@
+name: Scrap Mechanic overlay fix
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PREMAKE_ACTION: vs2022
+  DEPS_CACHE_KEY: emu-deps-win
+  DEPS_CACHE_DIR: build/deps/win
+  THIRD_PARTY_BASE_DIR: third-party
+  MAX_PARALLEL_JOBS: 4
+
+jobs:
+  deps:
+    name: Restore or build dependencies
+    uses: ./.github/workflows/emu-deps-win-vs22.yml
+
+  build:
+    name: Build experimental x86 DLL
+    needs: deps
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout patched source
+        uses: actions/checkout@v6
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v3
+
+      - name: Preserve LF line endings
+        shell: cmd
+        run: |
+          git config --local core.autocrlf false
+          git config --system core.autocrlf false
+          git config --global core.autocrlf false
+
+      - name: Restore dependencies
+        uses: actions/cache@v5
+        with:
+          key: ${{ env.DEPS_CACHE_KEY }}-${{ env.PREMAKE_ACTION }}
+          path: ${{ env.DEPS_CACHE_DIR }}/${{ env.PREMAKE_ACTION }}
+
+      - name: Checkout Windows build helpers
+        uses: actions/checkout@v6
+        with:
+          repository: Detanup01/gbe_fork
+          ref: third-party/common/win
+          path: ${{ env.THIRD_PARTY_BASE_DIR }}/common/win
+
+      - name: Checkout Windows signing helpers
+        uses: actions/checkout@v6
+        with:
+          repository: Detanup01/gbe_fork
+          ref: third-party/build/win
+          path: ${{ env.THIRD_PARTY_BASE_DIR }}/build/win
+
+      - name: Generate Visual Studio project
+        shell: cmd
+        run: |
+          "${{ env.THIRD_PARTY_BASE_DIR }}\common\win\premake\premake5.exe" --file=premake5.lua --genproto --emubuild=${{ github.sha }} --dosstub --winrsrc --winsign --os=windows vs2022
+
+      - name: Build experimental Win32 Steam API
+        shell: cmd
+        working-directory: ${{ github.workspace }}/build/project/vs2022/win
+        run: |
+          msbuild /nologo /target:api_experimental /m:1 -p:CL_MPCount=${{ env.MAX_PARALLEL_JOBS }} /v:n /p:Configuration=release,Platform=Win32 gbe.sln
+
+      - name: Verify DLL
+        shell: pwsh
+        run: |
+          $dll = "build/win/vs2022/release/experimental/x86/steam_api.dll"
+          if (!(Test-Path $dll)) {
+            throw "Patched steam_api.dll was not generated"
+          }
+          Get-FileHash $dll -Algorithm SHA256
+          Get-Item $dll
+
+      - name: Upload patched DLL
+        uses: actions/upload-artifact@v7
+        with:
+          name: scrap-mechanic-goldberg-overlay-fix-x86
+          path: build/win/vs2022/release/experimental/x86/steam_api.dll
+          if-no-files-found: error
+          retention-days: 7
